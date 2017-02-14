@@ -5887,6 +5887,11 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	arm_smmu_atos_selftest(smmu);
 	arm_smmu_power_off(smmu->pwr);
 
+	INIT_LIST_HEAD(&smmu->list);
+	spin_lock(&arm_smmu_devices_lock);
+	list_add(&smmu->list, &arm_smmu_devices);
+	spin_unlock(&arm_smmu_devices_lock);
+
 	/*
 	 * For ACPI and generic DT bindings, an SMMU will be probed before
 	 * any device which might need it, so we want the bus ops in place
