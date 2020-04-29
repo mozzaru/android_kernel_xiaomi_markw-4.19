@@ -555,14 +555,15 @@ static int fpc1020_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	if(!dev->parent || !dev->parent->parent) {
-		dev_warn(dev, "Parent platform device not found");
+	if (!dev->parent || !dev->parent->parent) {
+		dev_warn(dev, "Parent platform device not found\n");
 		goto exit;
 	}
 
 	platform_dev = dev->parent->parent;
-	if(strcmp(kobject_name(&platform_dev->kobj), "platform")) {
-		dev_warn(dev, "Parent platform device name not matched: %s", kobject_name(&platform_dev->kobj));
+	if (strcmp(kobject_name(&platform_dev->kobj), "platform")) {
+		dev_warn(dev, "Parent platform device name not matched: %s\n",
+			 kobject_name(&platform_dev->kobj));
 		goto exit;
 	}
 
@@ -570,12 +571,11 @@ static int fpc1020_probe(struct platform_device *pdev)
 	soc_kobj = &dev->parent->kobj;
 	soc_node = soc_kobj->sd;
 	kernfs_get(soc_node);
-
 	soc_symlink = kernfs_create_link(devices_node, kobject_name(soc_kobj), soc_node);
 	kernfs_put(soc_node);
-	if(IS_ERR(soc_symlink)) {
-		dev_warn(dev, "Unable to create soc symlink");
-	}
+
+	if (IS_ERR(soc_symlink))
+		dev_warn(dev, "Unable to create soc symlink\n");
 
 	dev_info(dev, "%s: ok\n", __func__);
 exit:
@@ -589,6 +589,8 @@ static int fpc1020_remove(struct platform_device *pdev)
 		kernfs_remove_by_name(soc_symlink->parent, soc_symlink->name);
 	}
 
+	if (!IS_ERR(soc_symlink))
+		kernfs_remove_by_name(soc_symlink->parent, soc_symlink->name);
 	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
 	mutex_destroy(&fpc1020->lock);
 	wakeup_source_trash(&fpc1020->ttw_wl);
