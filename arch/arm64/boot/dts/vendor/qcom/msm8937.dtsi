@@ -446,12 +446,13 @@
 		#clock-cells = <1>;
 	};
 
-	clock_gcc_mdss: qcom,gcc-mdss@1800000 {
-		compatible = "qcom,gcc-mdss-8937";
-		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
-			 <&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>,
-			 <&mdss_dsi1_pll clk_dsi_pll1_pixel_clk_src>,
-			 <&mdss_dsi1_pll clk_dsi_pll1_byte_clk_src>;
+	gcc_mdss: qcom,gcc-mdss@1800000 {
+		compatible = "qcom,gcc-mdss-sdm439";
+		reg = <0x1800000 0x80000>;
+		 clocks = <&mdss_dsi0_pll PCLK_SRC_0_CLK>,
+		 <&mdss_dsi0_pll BYTECLK_SRC_0_CLK>,
+		 <&mdss_dsi1_pll PCLK_SRC_1_CLK>,
+		 <&mdss_dsi1_pll BYTECLK_SRC_1_CLK>;
 		clock-names = "pclk0_src", "byte0_src", "pclk1_src",
 			"byte1_src";
 		#clock-cells = <1>;
