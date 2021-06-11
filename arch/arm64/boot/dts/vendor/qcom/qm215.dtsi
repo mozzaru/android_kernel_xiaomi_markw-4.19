@@ -36,8 +36,24 @@
 	};
 };
 
-&clock_gcc {
-	compatible = "qcom,gcc-qm215";
+&gcc {
+	compatible = "qcom,gcc-qm215", "syscon";
+};
+
+&apsscc {
+	cpu-vdd-supply = <&apc_vreg_corner>;
+	vdd_dig_ao-supply = <&pm8916_s1_level_ao>;
+	vdd_hf_pll-supply = <&pm8916_l7_ao>;
+};
+
+&msm_cpufreq {
+	/delete-property/qcom,cpufreq-table;
+	qcom,cpufreq-table =
+	 <  960000 >,
+	 < 1094400 >,
+	 < 1209600 >,
+	 < 1248000 >,
+	 < 1305600 >;
 };
 
 /* GPU overrides */
