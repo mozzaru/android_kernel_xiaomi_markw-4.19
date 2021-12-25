@@ -18,7 +18,6 @@
 #include <linux/leds.h>
 #include <linux/slab.h>
 #include <linux/of_device.h>
-#include <linux/of_gpio.h>
 #include <linux/spmi.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
@@ -30,7 +29,6 @@
 #include <linux/leds-qpnp-flash.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/qpnp/qpnp-revid.h>
-#include <linux/iio/consumer.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 #include "leds.h"
@@ -251,7 +249,7 @@ struct qpnp_flash_led {
 	struct flash_node_data		*flash_node;
 	struct power_supply		*battery_psy;
 	struct workqueue_struct		*ordered_workq;
-	struct iio_channel		*iio_chan;
+	struct qpnp_vadc_chip		*vadc_dev;
 	struct mutex			flash_led_lock;
 	struct dentry			*dbgfs_root;
 	int				num_leds;
@@ -618,15 +616,16 @@ static int qpnp_flash_led_get_allowed_die_temp_curr(struct qpnp_flash_led *led,
 
 static int64_t qpnp_flash_led_get_die_temp(struct qpnp_flash_led *led)
 {
-	int die_temp_result, rc;
+	struct qpnp_vadc_result die_temp_result;
+	int rc;
 
-	rc = iio_read_channel_processed(led->iio_chan, &die_temp_result);
+	rc = qpnp_vadc_read(led->vadc_dev, SPARE2, &die_temp_result);
 	if (rc) {
 		pr_err("failed to read the die temp\n");
 		return -EINVAL;
 	}
 
-	return die_temp_result;
+	return die_temp_result.physical;
 }
 
 static int qpnp_get_pmic_revid(struct qpnp_flash_led *led)
@@ -2331,8 +2330,8 @@ static int qpnp_flash_led_parse_common_dt(
 					"qcom,die-current-derate-enabled");
 
 	if (led->pdata->die_current_derate_en) {
-		led->iio_chan = iio_channel_get(&led->pdev->dev, "die-temp");
-		if (IS_ERR(led->iio_chan)) {
+		led->vadc_dev = qpnp_get_vadc(&led->pdev->dev, "die-temp");
+		if (IS_ERR(led->vadc_dev)) {
 			pr_err("VADC channel property Missing\n");
 			return -EINVAL;
 		}
@@ -2468,11 +2467,7 @@ static int qpnp_flash_led_probe(struct platform_device *pdev)
 	led->pdev = pdev;
 	led->current_addr = FLASH_LED0_CURRENT(led->base);
 	led->current2_addr = FLASH_LED1_CURRENT(led->base);
-	rc = qpnp_flash_register_led_prepare(&pdev->dev, qpnp_flash_led_prepare_v1);
-	if (rc < 0) {
-		pr_err("Failed to register flash_led_prepare, rc=%d\n", rc);
-		return rc;
-	}
+	qpnp_flash_led_prepare = qpnp_flash_led_prepare_v1;
 
 	led->pdata = devm_kzalloc(&pdev->dev, sizeof(*led->pdata), GFP_KERNEL);
 	if (!led->pdata)
