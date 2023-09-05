@@ -578,7 +578,7 @@ int cpr3_parse_common_corner_data(struct cpr3_regulator *vreg)
 			return rc;
 		}
 
-		/*
+	/*
 		 * Sanity check against arbitrarily large value to avoid
 		 * excessive memory allocation.
 		 */
