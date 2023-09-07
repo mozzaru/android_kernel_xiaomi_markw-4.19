@@ -24,7 +24,7 @@
 	interrupt-parent = <&wakegic>;
 
 	chosen {
-		bootargs = "sched_enable_hmp=1 kpti=0";
+		bootargs = "sched_enable_hmp=1";
 	};
 
 	aliases {
@@ -483,13 +483,8 @@
 		rpm-channel-type = <15>; /* SMD_APPS_RPM */
 	};
 
-	rpmcc: qcom,rpmcc {
-		compatible = "qcom,rpmcc-qm215";
-		#clock-cells = <1>;
-	};
-
-	gcc: qcom,gcc@1800000 {
-		compatible = "qcom,gcc-msm8917", "syscon";
+	clock_gcc: qcom,gcc@1800000 {
+		compatible = "qcom,gcc-8917";
 		reg = <0x1800000 0x80000>,
 			<0xb016000 0x00040>,
 			<0x00a6018 0x00004>;
@@ -518,20 +513,16 @@
 		#clock-cells = <1>;
 	};
 
-	apsscc: qcom,clock-cpu@b011050 {
-		compatible = "qcom,cpu-clock-qm215";
-		reg =   <0xb011050 0x8>,
-			<0xb016000 0x34>,
-			<0x00a412c 0x8>,
-			<0xb011200 0x100>;
-		reg-names = "apcs-c1-rcg-base",
-			"apcs_pll1", "efuse", "spm_c1_base";
-		cpu-vdd-supply = <&apc_vreg_corner>;
-		vdd_dig_ao-supply = <&pm8937_s2_level_ao>;
-		vdd_hf_pll-supply = <&pm8937_l7_ao>;
-		clocks = <&rpmcc RPM_SMD_XO_A_CLK_SRC>,
-			<&gcc GPLL0_AO_OUT_MAIN>;
-		clock-names = "xo_ao", "gpll0_ao" ;
+	clock_cpu: qcom,cpu-clock-8939@b111050 {
+		compatible = "qcom,cpu-clock-8917";
+		reg = <0xb011050 0x8>,
+			<0x00a412c 0x8>;
+		reg-names = "apcs-c1-rcg-base", "efuse";
+		qcom,num-cluster;
+		vdd-c1-supply = <&apc_vreg_corner>;
+		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
+			 <&clock_gcc clk_a53ss_c1_pll>;
+		clock-names = "clk-c1-4", "clk-c1-5";
 		qcom,speed0-bin-v0-c1 =
 			<          0 0>,
 			<  960000000 1>,

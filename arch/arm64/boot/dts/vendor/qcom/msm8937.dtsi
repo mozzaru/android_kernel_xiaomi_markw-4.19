@@ -123,9 +123,7 @@
 		dump_mem: mem_dump_region {
 			compatible = "shared-dma-pool";
 			reusable;
-			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
-			alignment = <0x0 0x400000>;
-			size = <0 0x19d000>;
+			size = <0x400000>;
 		};
 	};
 
@@ -413,19 +411,22 @@
 		qcom,summing-threshold = <10>;
 	};
 
-	rpmcc: qcom,rpmcc {
-		compatible = "qcom,rpmcc-sdm439";
-		#clock-cells = <1>;
-	};
-
-	gcc: qcom,gcc@1800000 {
-		compatible = "qcom,gcc-msm8937", "syscon";
-		reg = <0x1800000 0x80000>;
-		reg-names = "cc_base";
-		qcom,gcc_oxili_gfx3d_clk-opp-handle = <&msm_gpu>;
-		vdd_cx-supply = <&pm8937_s2_level>;
-		clocks = <&rpmcc RPM_SMD_XO_CLK_SRC>;
-		clock-names = "bi_tcxo";
+	clock_gcc: qcom,gcc@1800000 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "qcom,gcc-8937";
+		reg = <0x1800000 0x80000>,
+			<0xb016000 0x00040>,
+			<0xb116000 0x00040>,
+			<0x00a6018 0x00004>;
+		reg-names = "cc_base", "apcs_c1_base",
+				"apcs_c0_base", "efuse";
+		qcom,gfx3d_clk_src-opp-store-vcorner = <&msm_gpu>;
+		vdd_dig-supply = <&pm8937_s2_level>;
+		vdd_sr2_dig-supply = <&pm8937_s2_level_ao>;
+		vdd_sr2_pll-supply = <&pm8937_l7_ao>;
+		vdd_hf_dig-supply = <&pm8937_s2_level_ao>;
+		vdd_hf_pll-supply = <&pm8937_l7_ao>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
 		ranges;
@@ -445,13 +446,12 @@
 		#clock-cells = <1>;
 	};
 
-	gcc_mdss: qcom,gcc-mdss@1800000 {
-		compatible = "qcom,gcc-mdss-sdm439";
-		reg = <0x1800000 0x80000>;
-		 clocks = <&mdss_dsi0_pll PCLK_SRC_0_CLK>,
-		 <&mdss_dsi0_pll BYTECLK_SRC_0_CLK>,
-		 <&mdss_dsi1_pll PCLK_SRC_1_CLK>,
-		 <&mdss_dsi1_pll BYTECLK_SRC_1_CLK>;
+	clock_gcc_mdss: qcom,gcc-mdss@1800000 {
+		compatible = "qcom,gcc-mdss-8937";
+		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>,
+			 <&mdss_dsi1_pll clk_dsi_pll1_pixel_clk_src>,
+			 <&mdss_dsi1_pll clk_dsi_pll1_byte_clk_src>;
 		clock-names = "pclk0_src", "byte0_src", "pclk1_src",
 			"byte1_src";
 		#clock-cells = <1>;
@@ -463,18 +463,41 @@
 			<0xb111050 0x8>,
 			<0xb1d1050 0x8>,
 			<0x00a412c 0x8>;
-		reg-names = "apcs-c1-rcg-base", "apcs_pll1", "spm_c1_base",
-			"apcs-cci-rcg-base", "apcs-c0-rcg-base",
-			"apcs_pll0", "spm_c0_base", "efuse";
-		cpu-vdd-supply = <&apc_vreg_corner>;
-		vdd_dig_ao-supply = <&pm8937_s2_level_ao>;
-		vdd_hf_pll-supply = <&pm8937_l7_ao>;
-		vdd_sr2_dig_ao-supply = <&pm8937_s2_level_ao>;
-		vdd_sr2_pll-supply = <&pm8937_l7_ao>;
-		clocks = <&rpmcc RPM_SMD_XO_A_CLK_SRC>,
-			<&gcc GPLL0_AO_OUT_MAIN>;
-		clock-names = "xo_ao", "gpll0_ao" ;
+		reg-names = "apcs-c1-rcg-base", "apcs-c0-rcg-base",
+				"apcs-cci-rcg-base", "efuse";
+		vdd-c0-supply = <&apc_vreg_corner>;
+		vdd-c1-supply = <&apc_vreg_corner>;
+		vdd-cci-supply = <&apc_vreg_corner>;
+		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
+			<&clock_gcc clk_a53ss_c0_pll>,
+			<&clock_gcc clk_gpll0_ao_clk_src>,
+			<&clock_gcc clk_a53ss_c1_pll>,
+			<&clock_gcc clk_gpll0_ao_clk_src>,
+			<&clock_gcc clk_gpll0_ao_clk_src>;
+		clock-names = "clk-c0-4", "clk-c0-5",
+				"clk-c1-4", "clk-c1-5",
+				"clk-cci-4", "clk-cci-2";
 		qcom,speed0-bin-v0-c0 =
+			<          0 0>,
+			<  768000000 1>,
+			<  902400000 2>,
+			<  998400000 4>,
+			< 1094400000 6>;
+
+		qcom,speed0-bin-v0-c1 =
+			<          0 0>,
+			<  960000000 1>,
+			< 1094400000 2>,
+			< 1248000000 4>,
+			< 1344000000 5>,
+			< 1401000000 6>;
+
+		qcom,speed0-bin-v0-cci =
+			<          0 0>,
+			<  400000000 1>,
+			<  533333333 3>;
+
+		qcom,speed1-bin-v0-c0 =
 			<          0 0>,
 			<  768000000 1>,
 			<  902400000 2>,
@@ -482,7 +505,7 @@
 			< 1094400000 6>,
 			< 1209600000 7>;
 
-		qcom,speed0-bin-v0-c1 =
+		qcom,speed1-bin-v0-c1 =
 			<          0 0>,
 			<  960000000 1>,
 			< 1094400000 2>,
@@ -491,7 +514,24 @@
 			< 1401000000 6>,
 			< 1497600000 7>;
 
-		qcom,speed0-bin-v0-cci =
+		qcom,speed1-bin-v0-cci =
+			<          0 0>,
+			<  400000000 1>,
+			<  533333333 3>;
+
+		qcom,speed2-bin-v0-c0 =
+			<          0 0>,
+			<  768000000 1>,
+			<  902400000 2>,
+			<  998400000 3>;
+
+		qcom,speed2-bin-v0-c1 =
+			<          0 0>,
+			<  960000000 1>,
+			< 1094400000 2>,
+			< 1209600000 3>;
+
+		qcom,speed2-bin-v0-cci =
 			<          0 0>,
 			<  400000000 1>,
 			<  533333333 3>;
@@ -1637,13 +1677,13 @@
 		qcom,ssctl-instance-id = <0x12>;
 		qcom,qdsp6v56-1-8-inrush-current;
 		qcom,reset-clk;
-		qcom,iommu-vmid = <0xF>; /* VMID_MSS_MSA */
-		/* Inputs from mss */
-		interrupts-extended = <&modem_smp2p_in 0 0>,
-				<&modem_smp2p_in 1 0>,
-				<&modem_smp2p_in 2 0>,
-				<&modem_smp2p_in 3 0>,
-				<&modem_smp2p_in 7 0>;
+
+		/* GPIO inputs from mss */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_1_in 1 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_1_in 2 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_1_in 3 0>;
+		qcom,gpio-shutdown-ack = <&smp2pgpio_ssr_smp2p_1_in 7 0>;
 
 		/* GPIO output to mss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
