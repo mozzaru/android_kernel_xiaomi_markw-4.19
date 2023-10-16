@@ -314,6 +314,193 @@ static void setup_dload_mode_support(void)
 	}
 }
 
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+static bool device_locked_flag;
+static int __init device_locked(char *str)
+{
+	if (strcmp(str, "1"))
+		device_locked_flag = false;
+	else
+		device_locked_flag = true;
+	return 1;
+}
+__setup("device_locked=", device_locked);
+#endif
+
+static void msm_restart_prepare(const char *cmd)
+{
+	bool need_warm_reset = false;
+#ifdef CONFIG_QCOM_DLOAD_MODE
+	/* Write download mode flags if we're panic'ing
+	 * Write download mode flags if restart_mode says so
+	 * Kill download mode if master-kill switch is set
+	 */
+
+	set_dload_mode(download_mode &&
+			(in_panic || restart_mode == RESTART_DLOAD));
+#endif
+
+	if (qpnp_pon_check_hard_reset_stored()) {
+		/* Set warm reset as true when device is in dload mode */
+		if (get_dload_mode() ||
+			((cmd != NULL && cmd[0] != '\0') &&
+			!strcmp(cmd, "edl")))
+			need_warm_reset = true;
+	} else {
+		need_warm_reset = (get_dload_mode() ||
+				(cmd != NULL && cmd[0] != '\0'));
+	}
+
+#ifdef CONFIG_QCOM_PRESERVE_MEM
+	need_warm_reset = true;
+#endif
+
+	if (force_warm_reboot)
+		pr_info("Forcing a warm reset of the system\n");
+
+	/* Hard reset the PMIC unless memory contents must be maintained. */
+	if (force_warm_reboot || need_warm_reset)
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+	else
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+
+	if (cmd != NULL) {
+		if (!strncmp(cmd, "bootloader", 10)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_BOOTLOADER);
+			__raw_writel(0x77665500, restart_reason);
+		} else if (!strncmp(cmd, "recovery", 8)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_RECOVERY);
+			__raw_writel(0x77665502, restart_reason);
+		} else if (!strcmp(cmd, "rtc")) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_RTC);
+			__raw_writel(0x77665503, restart_reason);
+		} else if (!strcmp(cmd, "dm-verity device corrupted")) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_DMVERITY_CORRUPTED);
+			__raw_writel(0x77665508, restart_reason);
+		} else if (!strcmp(cmd, "dm-verity enforcing")) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_DMVERITY_ENFORCE);
+			__raw_writel(0x77665509, restart_reason);
+		} else if (!strcmp(cmd, "keys clear")) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_KEYS_CLEAR);
+			__raw_writel(0x7766550a, restart_reason);
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+		} else if (!strncmp(cmd, "fastmmi", 7)) {
+			__raw_writel(0x77665505, restart_reason);
+#endif
+		} else if (!strncmp(cmd, "oem-", 4)) {
+			unsigned long code;
+			unsigned long reset_reason;
+			int ret;
+
+			ret = kstrtoul(cmd + 4, 16, &code);
+			if (!ret) {
+				/* Bit-2 to bit-7 of SOFT_RB_SPARE for hard
+				 * reset reason:
+				 * Value 0 to 31 for common defined features
+				 * Value 32 to 63 for oem specific features
+				 */
+				reset_reason = code +
+						PON_RESTART_REASON_OEM_MIN;
+				if (reset_reason > PON_RESTART_REASON_OEM_MAX ||
+				   reset_reason < PON_RESTART_REASON_OEM_MIN) {
+					pr_err("Invalid oem reset reason: %lx\n",
+						reset_reason);
+				} else {
+					qpnp_pon_set_restart_reason(
+						reset_reason);
+				}
+				__raw_writel(0x6f656d00 | (code & 0xff),
+					     restart_reason);
+			}
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+		} else if (!strncmp(cmd, "edl", 3) && !device_locked_flag) {
+#else
+		} else if (!strncmp(cmd, "edl", 3)) {
+#endif
+			enable_emergency_dload_mode();
+		} else {
+			__raw_writel(0x77665501, restart_reason);
+		}
+	}
+
+	flush_cache_all();
+
+	/*outer_flush_all is not supported by 64bit kernel*/
+#ifndef CONFIG_ARM64
+	outer_flush_all();
+#endif
+
+}
+
+/*
+ * Deassert PS_HOLD to signal the PMIC that we are ready to power down or reset.
+ * Do this by calling into the secure environment, if available, or by directly
+ * writing to a hardware register.
+ *
+ * This function should never return.
+ */
+static void deassert_ps_hold(void)
+{
+	struct scm_desc desc = {
+		.args[0] = 0,
+		.arginfo = SCM_ARGS(1),
+	};
+
+	if (scm_deassert_ps_hold_supported) {
+		/* This call will be available on ARMv8 only */
+		scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_PWR,
+				 SCM_IO_DEASSERT_PS_HOLD), &desc);
+	}
+
+	/* Fall-through to the direct write in case the scm_call "returns" */
+	__raw_writel(0, msm_ps_hold);
+}
+
+static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
+{
+	pr_notice("Going down for restart now\n");
+
+	msm_restart_prepare(cmd);
+
+#ifdef CONFIG_QCOM_DLOAD_MODE
+	/*
+	 * Trigger a watchdog bite here and if this fails,
+	 * device will take the usual restart path.
+	 */
+
+	if (WDOG_BITE_ON_PANIC && in_panic)
+		msm_trigger_wdog_bite();
+#endif
+
+	scm_disable_sdi();
+	halt_spmi_pmic_arbiter();
+	deassert_ps_hold();
+
+	msleep(10000);
+}
+
+static void do_msm_poweroff(void)
+{
+	pr_notice("Powering off the SoC\n");
+
+	set_dload_mode(0);
+	scm_disable_sdi();
+	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
+
+	halt_spmi_pmic_arbiter();
+	deassert_ps_hold();
+
+	msleep(10000);
+	pr_err("Powering off has failed\n");
+}
+
+#ifdef CONFIG_QCOM_DLOAD_MODE
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {

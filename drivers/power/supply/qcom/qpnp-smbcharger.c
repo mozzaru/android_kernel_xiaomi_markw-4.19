@@ -170,6 +170,17 @@ struct smbchg_chip {
 	bool				checking_in_progress;
 	bool				screen_on_timeout;
 	struct mutex		screen_lock;
+#else 
+	/* wipower params */
+	struct ilim_map			wipower_default;
+	struct ilim_map			wipower_pt;
+	struct ilim_map			wipower_div2;
+	struct qpnp_vadc_chip		*vadc_dev;
+	bool				wipower_dyn_icl_avail;
+	struct ilim_entry		current_ilim;
+	struct mutex			wipower_config;
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	struct mutex 			cool_current;
 #endif
 
 	/* flash current prediction */
@@ -274,6 +285,9 @@ struct smbchg_chip {
 	struct work_struct		usb_set_online_work;
 	struct delayed_work		vfloat_adjust_work;
 	struct delayed_work		hvdcp_det_work;
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	struct delayed_work 		cool_limit_work;
+#endif
 	spinlock_t			sec_access_lock;
 	struct mutex			therm_lvl_lock;
 	struct mutex			usb_set_online_lock;
@@ -442,6 +456,11 @@ static const unsigned int smbchg_extcon_cable[] = {
 	EXTCON_USB_HOST,
 	EXTCON_NONE,
 };
+
+/* fg cc workaround */
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+#define NO_CHARGE_COUNTER
+#endif
 
 static int smbchg_debug_mask;
 module_param_named(
@@ -1204,6 +1223,37 @@ static int get_prop_batt_capacity(struct smbchg_chip *chip)
 	return capacity;
 }
 
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+static int get_prop_battery_charge_full_design(struct smbchg_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		power_supply_get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN, &ret);
+		return ret.intval;
+	} else {
+		pr_debug("No BMS supply registered return 0\n");
+	}
+	return 0;
+}
+
+static int get_prop_battery_charge_full(struct smbchg_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		power_supply_get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CHARGE_FULL, &ret);
+		return ret.intval;
+	} else {
+		pr_debug("No BMS supply registered return 0\n");
+	}
+
+	return 0;
+}
+#endif
+
 #define DEFAULT_BATT_TEMP		200
 static int get_prop_batt_temp(struct smbchg_chip *chip)
 {
@@ -1244,6 +1294,7 @@ static int get_prop_batt_resistance_id(struct smbchg_chip *chip)
 	return rbatt;
 }
 
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
 #define DEFAULT_BATT_FULL_CHG_CAPACITY	0
 static int get_prop_batt_full_charge(struct smbchg_chip *chip)
 {
@@ -3604,6 +3655,9 @@ static int smbchg_config_chg_battery_type(struct smbchg_chip *chip)
 	/* change vfloat */
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 						&max_voltage_uv);
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	max_voltage_uv = 4380000;
+#endif
 	if (rc) {
 		pr_warn("couldn't find battery max voltage rc=%d\n", rc);
 		ret = rc;
@@ -3726,6 +3780,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 									rc);
 	}
 
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
 	/* adjust vfloat */
 	smbchg_vfloat_adjust_check(chip);
 }
@@ -4262,6 +4317,31 @@ static int smbchg_adjust_vfloat_mv_trim(struct smbchg_chip *chip,
 	return rc;
 }
 
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+#define SMBCHG_UPDATE_MS 1000
+static void smbchg_cool_limit_work(struct work_struct *work)
+{
+	struct smbchg_chip *chip = container_of(work,
+			struct smbchg_chip,
+			cool_limit_work.work);
+	int temp, rc;
+
+	temp = get_prop_batt_temp(chip);
+
+	if (temp <= 50 && temp > 0) {
+		mutex_lock(&chip->cool_current);
+		rc = smbchg_fastchg_current_comp_set(chip, 250);
+		mutex_unlock(&chip->cool_current);
+	} else if (temp > 50 && temp < 150) {
+		mutex_lock(&chip->cool_current);
+		rc = smbchg_fastchg_current_comp_set(chip, 1200);
+		mutex_unlock(&chip->cool_current);
+	}
+
+	schedule_delayed_work(&chip->cool_limit_work, msecs_to_jiffies(SMBCHG_UPDATE_MS));
+}
+#endif
+
 #define VFLOAT_RESAMPLE_DELAY_MS	10000
 static void smbchg_vfloat_adjust_work(struct work_struct *work)
 {
@@ -4763,6 +4843,9 @@ static bool is_usbin_uv_high(struct smbchg_chip *chip)
 }
 
 #define HVDCP_NOTIFY_MS		2500
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+static int rerun_apsd(struct smbchg_chip *chip);
+#endif
 static void handle_usb_insertion(struct smbchg_chip *chip)
 {
 	enum power_supply_type usb_supply_type;
@@ -4772,6 +4855,12 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	pr_smb(PR_STATUS, "triggered\n");
 	/* usb inserted */
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	if (usb_supply_type == POWER_SUPPLY_TYPE_USB_CDP) {
+		rc = rerun_apsd(chip);
+		read_usb_type(chip, &usb_type_name, &usb_supply_type);
+	}
+#endif
 	pr_smb(PR_STATUS,
 		"inserted type = %d (%s)", usb_supply_type, usb_type_name);
 
@@ -5897,6 +5986,10 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+#endif
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
@@ -5910,6 +6003,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
@@ -6105,6 +6199,14 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = get_prop_batt_capacity(chip);
 		break;
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		val->intval = get_prop_battery_charge_full_design(chip);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		val->intval = get_prop_battery_charge_full(chip);
+		break;
+#endif
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_prop_batt_current_now(chip);
 		val->intval *= (-1);
@@ -6115,6 +6217,7 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = get_prop_batt_resistance_id(chip);
 		break;
+#ifndef CONFIG_MACH_XIAOMI_MARKW
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		val->intval = get_prop_batt_full_charge(chip);
 		break;
@@ -6293,6 +6396,23 @@ static irqreturn_t batt_warm_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	u8 reg = 0;
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	int rc;
+
+	/* set the warm float voltage compensation,
+	 * set the warm float voltage to 4.1V
+	 */
+	if (chip->float_voltage_comp != -EINVAL) {
+		rc = smbchg_float_voltage_comp_set(chip,
+						chip->float_voltage_comp);
+		if (rc < 0)
+			dev_err(chip->dev,
+				"Couldn't set float voltage comp rc = %d\n",
+				rc);
+		pr_smb(PR_STATUS, "set float voltage comp to %d\n",
+			chip->float_voltage_comp);
+	}
+#endif
 
 	smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
 	chip->batt_warm = !!(reg & HOT_BAT_SOFT_BIT);
@@ -6309,6 +6429,17 @@ static irqreturn_t batt_cool_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	u8 reg = 0;
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	int rc;
+
+	/* set the cool float voltage compensation,
+	 * set the cool float voltage to 4.4V
+	 */
+	rc = smbchg_float_voltage_comp_set(chip, 0);
+	if (rc < 0)
+		dev_err(chip->dev, "Couldn't set float voltage comp rc = %d\n",
+			rc);
+#endif
 
 	smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
 	chip->batt_cool = !!(reg & COLD_BAT_SOFT_BIT);
@@ -7343,6 +7474,23 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 		if (rc < 0)
 			dev_err(chip->dev, "Couldn't set OTG OC config rc = %d\n",
 				rc);
+
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+		rc = smbchg_sec_masked_write(chip, chip->otg_base + OTG_CFG,
+					     0x0c, 0x8);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"Couldn't set SMBCHGL_OTG_CFG rc=%d\n", rc);
+		}
+
+		rc = smbchg_read(chip, &reg, chip->otg_base + OTG_CFG, 1);
+		pr_debug("%s:read OTG_CFG=%2x\n", __func__, reg);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"Couldn't set SMBCHGL_OTG_CFG rc=%d\n", rc);
+		}
+#endif
+
 	}
 
 	if (chip->otg_pinctrl) {
@@ -7422,6 +7570,9 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 	if (chip->cfg_fastchg_current_ma == -EINVAL)
 		chip->cfg_fastchg_current_ma = DEFAULT_FCC_MA;
 	OF_PROP_READ(chip, chip->vfloat_mv, "float-voltage-mv", rc, 1);
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	chip->vfloat_mv = 4380;
+#endif
 	OF_PROP_READ(chip, chip->safety_time, "charging-timeout-mins", rc, 1);
 	OF_PROP_READ(chip, chip->vled_max_uv, "vled-max-uv", rc, 1);
 	if (chip->vled_max_uv < 0)
@@ -8347,6 +8498,10 @@ static int smbchg_probe(struct platform_device *pdev)
 			smbchg_parallel_usb_en_work);
 	INIT_DELAYED_WORK(&chip->vfloat_adjust_work, smbchg_vfloat_adjust_work);
 	INIT_DELAYED_WORK(&chip->hvdcp_det_work, smbchg_hvdcp_det_work);
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	INIT_DELAYED_WORK(&chip->cool_limit_work, smbchg_cool_limit_work);
+	schedule_delayed_work(&chip->cool_limit_work, msecs_to_jiffies(SMBCHG_UPDATE_MS));
+#endif
 	init_completion(&chip->src_det_lowered);
 	init_completion(&chip->src_det_raised);
 	init_completion(&chip->usbin_uv_lowered);
@@ -8366,8 +8521,8 @@ static int smbchg_probe(struct platform_device *pdev)
 	mutex_init(&chip->taper_irq_lock);
 	mutex_init(&chip->pm_lock);
 	mutex_init(&chip->usb_status_lock);
-#if defined(CONFIG_FB)
-	mutex_init(&chip->screen_lock);
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	mutex_init(&chip->cool_current);
 #endif
 	device_init_wakeup(chip->dev, true);
 
@@ -8376,6 +8531,10 @@ static int smbchg_probe(struct platform_device *pdev)
 		dev_err(chip->dev, "Error parsing DT peripherals: %d\n", rc);
 		goto votables_cleanup;
 	}
+
+#if defined(CONFIG_MACH_XIAOMI_С6) || defined(CONFIG_MACH_XIAOMI_MARKW)
+	chip->hvdcp_not_supported = true;
+#endif
 
 	rc = smbchg_check_chg_version(chip);
 	if (rc) {
