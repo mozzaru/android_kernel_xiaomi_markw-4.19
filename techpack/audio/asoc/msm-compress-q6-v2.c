@@ -1578,14 +1578,17 @@ static int msm_compr_configure_dsp_for_capture(struct snd_compr_stream *cstream)
 			__func__, ac->stream_id, bits_per_sample,
 			prtd->compr_passthr);
 
-	if (prtd->compr_passthr != LEGACY_PCM) {
-		ret = q6asm_open_read_compressed(prtd->audio_client,
-                                prtd->codec, prtd->compr_passthr);
-		if (ret < 0) {
-			pr_err("%s:ASM open read err[%d] for compr_type[%d]\n",
-					__func__, ret, prtd->compr_passthr);
-			return ret;
-		}
+	if (prtd->codec_param.codec.flags & COMPRESSED_TIMESTAMP_FLAG) {
+		ret = q6asm_open_read_v4(prtd->audio_client, FORMAT_LINEAR_PCM,
+			bits_per_sample, true);
+	} else {
+		ret = q6asm_open_read_v4(prtd->audio_client, FORMAT_LINEAR_PCM,
+			bits_per_sample, false);
+	}
+	if (ret < 0) {
+		pr_err("%s: q6asm_open_read failed:%d\n", __func__, ret);
+		return ret;
+	}
 
 		ret = msm_pcm_routing_reg_phy_compr_stream(
 				soc_prtd->dai_link->id,
@@ -1672,30 +1675,10 @@ static int msm_compr_configure_dsp_for_capture(struct snd_compr_stream *cstream)
 	pr_debug("%s: sample_rate = %d channels = %d bps = %d sample_word_size = %d\n",
 			__func__, prtd->sample_rate, prtd->num_channels,
 					 bits_per_sample, sample_word_size);
-	if (prtd->codec == FORMAT_BESPOKE) {
-		/*
-		 * For BESPOKE codec, encoder specific config params are
-		 * included as part of generic.
-		 */
-		ret = q6asm_enc_cfg_blk_custom(prtd->audio_client, prtd->sample_rate,
-			prtd->num_channels, prtd->codec,
-			(void *)&prtd->codec_param.codec.options.generic);
-	} else if (prtd->compr_passthr == LEGACY_PCM) {
-		if (q6core_get_avcs_api_version_per_service(
-				APRV2_IDS_SERVICE_ID_ADSP_ASM_V) >=
-				ADSP_ASM_API_VERSION_V2)
-			ret = q6asm_enc_cfg_blk_pcm_format_support_v5(
-					prtd->audio_client,
+	ret = q6asm_enc_cfg_blk_pcm_format_support_v4(prtd->audio_client,
 					prtd->sample_rate, prtd->num_channels,
 					bits_per_sample, sample_word_size,
 					ASM_LITTLE_ENDIAN, DEFAULT_QF);
-		else
-			ret = q6asm_enc_cfg_blk_pcm_format_support_v4(
-					prtd->audio_client,
-					prtd->sample_rate, prtd->num_channels,
-					bits_per_sample, sample_word_size,
-					ASM_LITTLE_ENDIAN, DEFAULT_QF);
-	}
 
 	return ret;
 }
@@ -2838,16 +2821,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 
 		pr_debug("%s: open_write stream_id %d bits_per_sample %d",
 				__func__, stream_id, bits_per_sample);
-
-		if (q6core_get_avcs_api_version_per_service(
-					APRV2_IDS_SERVICE_ID_ADSP_ASM_V) >=
-					ADSP_ASM_API_VERSION_V2)
-			rc = q6asm_stream_open_write_v5(prtd->audio_client,
-				prtd->codec, bits_per_sample,
-				stream_id,
-				prtd->gapless_state.use_dsp_gapless_mode);
-		else
-			rc = q6asm_stream_open_write_v4(prtd->audio_client,
+		rc = q6asm_stream_open_write_v4(prtd->audio_client,
 				prtd->codec, bits_per_sample,
 				stream_id,
 				prtd->gapless_state.use_dsp_gapless_mode);

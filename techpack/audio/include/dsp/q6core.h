@@ -419,16 +419,4 @@ int q6core_map_mdf_shared_memory(uint32_t map_handle, uint64_t *buf_add,
 int32_t core_set_license(uint32_t key, uint32_t module_id);
 int32_t core_get_license_status(uint32_t module_id);
 
-int32_t q6core_load_unload_topo_modules(uint32_t topology_id,
-			bool preload_type);
-
-int q6core_create_lpass_npa_client(uint32_t node_id, char *client_name,
-				   uint32_t *client_handle);
-int q6core_destroy_lpass_npa_client(uint32_t client_handle);
-int q6core_request_island_transition(uint32_t client_handle,
-				     uint32_t island_allow_mode);
-
-int q6core_get_avcs_avs_build_version_info(
-	uint32_t *build_major_version, uint32_t *build_minor_version,
-					uint32_t *build_branch_version);
 #endif /* __Q6CORE_H__ */
