@@ -23,11 +23,6 @@
 #include <ipc/apr.h>
 #include "adsp_err.h"
 
-/* For legacy version retrieval */
-#include <dsp/q6lsm.h>
-#include <dsp/q6adm-v2.h>
-#include <dsp/q6afe-v2.h>
-
 #define TIMEOUT_MS 1000
 /*
  * AVS bring up in the modem is optimized for the new
@@ -646,6 +641,42 @@ EXPORT_SYMBOL(q6core_get_service_version);
 
 static int q6core_get_avcs_fwk_version(void)
 {
+        int ret = 0;
+
+        mutex_lock(&(q6core_lcl.ver_lock));
+        pr_debug("%s: q6core_avcs_ver_info.status(%d)\n", __func__,
+                 q6core_lcl.q6core_avcs_ver_info.status);
+
+        switch (q6core_lcl.q6core_avcs_ver_info.status) {
+        case VER_QUERY_SUPPORTED:
+                pr_debug("%s: AVCS FWK version query already attempted\n",
+                         __func__);
+                break;
+        case VER_QUERY_UNSUPPORTED:
+                ret = -EOPNOTSUPP;
+                break;
+        case VER_QUERY_UNATTEMPTED:
+                pr_debug("%s: Attempting AVCS FWK version query\n", __func__);
+                if (q6core_is_adsp_ready()) {
+                        ret = q6core_send_get_avcs_fwk_ver_cmd();
+                } else {
+                        pr_err("%s: ADSP is not ready to query version\n",
+                               __func__);
+                        ret = -ENODEV;
+                }
+                break;
+        default:
+                pr_err("%s: Invalid version query status %d\n", __func__,
+                       q6core_lcl.q6core_avcs_ver_info.status);
+                ret = -EINVAL;
+                break;
+        }
+        mutex_unlock(&(q6core_lcl.ver_lock));
+        return ret;
+}
+
+size_t q6core_get_fwk_version_size(uint32_t service_id)
+{
 	int ret = 0;
 
 	mutex_lock(&(q6core_lcl.ver_lock));
@@ -708,24 +739,6 @@ done:
 }
 EXPORT_SYMBOL(q6core_get_fwk_version_size);
 
-static int q6core_get_legacy_avcs_fwk_version(uint32_t service_id)
-{
-	switch (service_id) {
-	case APRV2_IDS_SERVICE_ID_ADSP_LSM_V:
-		return LSM_API_VERSION_V2;
-	case APRV2_IDS_SERVICE_ID_ADSP_ADM_V:
-		return ADSP_ADM_API_VERSION_V1;
-	case APRV2_IDS_SERVICE_ID_ADSP_ASM_V:
-		return ADSP_ASM_API_VERSION_V1;
-	case APRV2_IDS_SERVICE_ID_ADSP_AFE_V:
-		return AFE_API_VERSION_V1;
-	default:
-		break;
-	}
-
-	return -EOPNOTSUPP;
-}
-
 /**
  * q6core_get_avcs_version_per_service -
  *       to get api version of a particular service
@@ -744,20 +757,13 @@ int q6core_get_avcs_api_version_per_service(uint32_t service_id)
 	if (service_id == AVCS_SERVICE_ID_ALL)
 		return -EINVAL;
 
-	ret = q6core_get_avcs_fwk_version();
-	if (ret < 0) {
-		if (ret == -EOPNOTSUPP) {
-			/* Look in legacy support... */
-			ret = q6core_get_legacy_avcs_fwk_version(service_id);
-		} else {
-			pr_err("%s: failure in getting AVCS version\n",
-			       __func__);
-		}
-		return ret;
-	}
+        ret = q6core_get_avcs_fwk_version();
+        if (ret < 0) {
+                pr_err("%s: failure in getting AVCS version\n", __func__);
+                return ret;
+        }
 
-	cached_ver_info = q6core_lcl.q6core_avcs_ver_info.ver_info;
-	num_services = cached_ver_info->avcs_fwk_version.num_services;
+		num_services = cached_ver_info->avcs_fwk_version.num_services;
 
 	for (i = 0; i < num_services; i++) {
 		if (cached_ver_info->services[i].service_id == service_id)
