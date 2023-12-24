@@ -136,7 +136,7 @@ do {                                                    \
 #define HS_DETECT_PLUG_TIME_MS (3 * 1000)
 #endif
 #define SPECIAL_HS_DETECT_TIME_MS (2 * 1000)
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2)
+#if (defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2)
 #define MBHC_BUTTON_PRESS_THRESHOLD_MIN 750
 #else
 #define MBHC_BUTTON_PRESS_THRESHOLD_MIN 250

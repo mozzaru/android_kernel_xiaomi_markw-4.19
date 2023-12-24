@@ -99,7 +99,7 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
 	.key_code[0] = KEY_MEDIA,
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2)
+#if (defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2)
 	.key_code[1] = BTN_1,
 	.key_code[2] = BTN_2,
 	.key_code[3] = 0,
@@ -419,7 +419,7 @@ int is_ext_spk_gpio_support(struct platform_device *pdev,
 		ext_pa_gpio = pdata->spk_ext_pa_gpio;
 #endif
 	}
-#ifdef CONFIG_MACH_XIAOMI_MIDO
+#ifdef CONFIG_MACH_XIAOMI_MARKW
 	gpio_direction_output(pdata->spk_ext_pa_gpio, 0);
 #endif
 	return 0;
@@ -429,10 +429,10 @@ static int enable_spk_ext_pa(struct snd_soc_component *component, int enable)
 {
 	struct snd_soc_card *card = component->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-#if !((defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2))
+#if !((defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2))
 	int ret;
 #endif
-#ifdef CONFIG_MACH_XIAOMI_MIDO
+#ifdef CONFIG_MACH_XIAOMI_MARKW
 	int pa_mode = EXT_PA_MODE;
 #endif
 
@@ -450,7 +450,7 @@ static int enable_spk_ext_pa(struct snd_soc_component *component, int enable)
 		enable ? "Enable" : "Disable");
 
 	if (enable) {
-#ifdef CONFIG_MACH_XIAOMI_MIDO
+#ifdef CONFIG_MACH_XIAOMI_MARKW
 		while (pa_mode > 0) {
 			gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, 0);
 			udelay(2);
@@ -472,7 +472,7 @@ static int enable_spk_ext_pa(struct snd_soc_component *component, int enable)
 #endif
 	} else {
 		gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
-#if !((defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2))
+#if !((defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2))
 		ret = msm_cdc_pinctrl_select_sleep_state(
 				pdata->spk_ext_pa_gpio_p);
 		if (ret) {
@@ -1683,7 +1683,7 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8952_wcd_cal)->X) = (Y))
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2)
+#if (defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2)
 	S(v_hs_max, 1600);
 #else
 	S(v_hs_max, 1500);
@@ -1710,7 +1710,7 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
-#if defined(CONFIG_MACH_XIAOMI_MIDO)
+#if defined(CONFIG_MACH_XIAOMI_MARKW)
 	btn_low[0] = 73;
 	btn_high[0] = 73;
 	btn_low[1] = 233;

@@ -2946,7 +2946,7 @@ static int msm_anlg_cdc_lo_dac_event(struct snd_soc_dapm_widget *w,
 			MSM89XX_PMIC_ANALOG_RX_LO_DAC_CTL, 0x08, 0x08);
 		snd_soc_component_update_bits(component,
 			MSM89XX_PMIC_ANALOG_RX_LO_DAC_CTL, 0x40, 0x40);
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2)
+#if (defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2)
 		msleep(5);
 #endif
 		break;
@@ -3154,7 +3154,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"LINEOUT PA", NULL, "LINE_OUT"},
 	{"LINE_OUT", "Switch", "LINEOUT DAC"},
 	{"LINEOUT DAC", NULL, "PDM_IN_RX3"},
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_D2)
+#if (defined CONFIG_MACH_XIAOMI_MARKW) || (defined CONFIG_MACH_XIAOMI_D2)
 	{ "Ext Spk", NULL, "LINEOUT PA"},
 #endif
 
