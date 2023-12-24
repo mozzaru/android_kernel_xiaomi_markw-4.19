@@ -1350,13 +1350,8 @@ config TOUCHSCREEN_SYNAPTICS_TCM
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_tcm.
 
-source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
+source "drivers/input/touchscreen/Atmel308U/Kconfig"
 
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
-
-source "drivers/input/touchscreen/nt36xxx/Kconfig"
-
-source "drivers/input/touchscreen/synaptics_dsx_force/Kconfig"
-source "drivers/input/touchscreen/ft5x46/Kconfig"
+source "drivers/input/touchscreen/FT5346/Kconfig"
 
 endif
