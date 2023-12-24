@@ -454,21 +454,8 @@ config MACH_XIAOMI_DUMMY
 	help
 	  A stub configuration that doesn't enable support for anything.
 
-config MACH_XIAOMI_OXYGEN
-	bool  "XIAOMI platform"
-	depends on ARCH_MSM8953
-	help
-	  Support for the Xiaomi Max 2 platform
-	  which is based on QCOM MSM8953 chipset.
-	  
 config MACH_XIAOMI_MARKW
 	bool "MARKW board"
-	select MACH_XIAOMI_MSM8953
-	help
-	  This enables support for Xiaomi Redmi 4 Prime.
-
-config MACH_XIAOMI_C6
-	bool "C6 board"
 	select MACH_XIAOMI_MSM8953
 	help
 	  This enables support for Xiaomi Redmi 4 Prime.
