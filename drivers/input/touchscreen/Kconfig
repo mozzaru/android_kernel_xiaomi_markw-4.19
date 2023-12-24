@@ -1351,7 +1351,6 @@ config TOUCHSCREEN_SYNAPTICS_TCM
 	  module will be called synaptics_tcm.
 
 source "drivers/input/touchscreen/Atmel308U/Kconfig"
-
 source "drivers/input/touchscreen/FT5346/Kconfig"
 
 endif
