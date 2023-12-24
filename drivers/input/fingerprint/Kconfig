@@ -15,3 +15,8 @@ source "drivers/input/fingerprint/goodix_ta/Kconfig"
 source "drivers/input/fingerprint/fpc_tee/Kconfig"
 
 endif
+
+if MACH_XIAOMI_MARKW
+source "drivers/input/fingerprint/goodix_markw/Kconfig"
+source "drivers/input/fingerprint/fpc_markw/Kconfig"
+endif
