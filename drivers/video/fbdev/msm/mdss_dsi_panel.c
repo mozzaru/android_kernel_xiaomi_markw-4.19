@@ -16,7 +16,6 @@
 #include <linux/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
-#include <linux/hwinfo.h>
 #include "mdss_dsi.h"
 #include "mdss_dba_utils.h"
 #include "mdss_debug.h"
